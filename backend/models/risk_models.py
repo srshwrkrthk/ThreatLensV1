@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import Dict
 
 
 class RiskRequest(BaseModel):
@@ -10,4 +11,5 @@ class RiskRequest(BaseModel):
 class RiskResponse(BaseModel):
     overall_score: int
     risk_level: str
-    components: dict
+    components: Dict[str, int]
+    weights: Dict[str, str]

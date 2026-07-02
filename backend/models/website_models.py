@@ -67,6 +67,12 @@ class SecurityTxtInfo(BaseModel):
     description: str
     recommendation: str
 
+class TechnologyInfo(BaseModel):
+    name: str
+    category: str
+    evidence: str
+    confidence: str
+
 class WebsiteSummary(BaseModel):
     score: int
     risk_level: str
@@ -81,4 +87,5 @@ class WebsiteResponse(BaseModel):
     http_methods: HTTPMethodsInfo
     robots_txt: RobotsInfo
     security_txt: SecurityTxtInfo
+    technologies: List[TechnologyInfo]
     summary: WebsiteSummary

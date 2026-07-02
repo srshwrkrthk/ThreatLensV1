@@ -3,6 +3,9 @@ import requests
 
 from utils.network_utils import get_domain, get_ip_address, get_ssl_info
 from utils.dns_utils import get_dns_records, get_dmarc_record
+from analyzers.fingerprint_analyzer import detect_technologies
+from analyzers.risk_engine import calculate_website_risk
+from utils.whois_utils import get_whois_info
 
 
 SECURITY_HEADERS = {
@@ -185,7 +188,8 @@ def analyze_robots_txt(final_url: str):
                     path = line.split(":", 1)[1].strip()
 
                     if path:
-                        disallowed_paths.append(path)
+                        if path not in disallowed_paths:
+                            disallowed_paths.append(path)
 
     except requests.exceptions.RequestException:
         robots_found = False
@@ -229,15 +233,6 @@ def analyze_security_txt(final_url: str):
     }
 
 
-def calculate_risk_level(score: int):
-    if score >= 60:
-        return "High Risk"
-    elif score >= 30:
-        return "Moderate Risk"
-    else:
-        return "Low Risk"
-
-
 def analyze_website(url: str):
     url = normalize_url(url)
 
@@ -246,8 +241,9 @@ def analyze_website(url: str):
 
         final_url = response.url
         headers = response.headers
-
+        technologies = detect_technologies(headers, response.text)
         domain = get_domain(final_url)
+        whois_info = get_whois_info(domain)
         ip_address = get_ip_address(domain)
 
         dns_records = get_dns_records(domain)
@@ -269,54 +265,76 @@ def analyze_website(url: str):
             "certificate_valid": False
         }
 
-        score = 0
-        findings = []
+        risk_points = []
 
         if not https_enabled:
-            score += 25
-            findings.append("Website does not use HTTPS.")
+            risk_points.append({
+                "points": 25,
+                "message": "Website does not use HTTPS."
+            })
 
         if not ssl_info["certificate_valid"]:
-            score += 25
-            findings.append("SSL certificate is invalid or unavailable.")
+            risk_points.append({
+                "points": 25,
+                "message": "SSL certificate is invalid or unavailable."
+            })
 
         days_remaining = ssl_info.get("days_remaining")
 
         if days_remaining is not None:
             if days_remaining <= 0:
-                score += 25
-                findings.append("SSL certificate has expired.")
+                risk_points.append({
+                    "points": 25,
+                    "message": "SSL certificate has expired."
+                })
             elif days_remaining <= 15:
-                score += 15
-                findings.append("SSL certificate expires very soon.")
+                risk_points.append({
+                    "points": 15,
+                    "message": "SSL certificate expires very soon."
+                })
             elif days_remaining <= 30:
-                score += 8
-                findings.append("SSL certificate expires within 30 days.")
+                risk_points.append({
+                    "points": 8,
+                    "message": "SSL certificate expires within 30 days."
+                })
 
         if not spf_found:
-            score += 8
-            findings.append("SPF record was not found. Email spoofing protection may be weak.")
+            risk_points.append({
+                "points": 8,
+                "message": "SPF record was not detected in returned TXT records."
+            })
 
         if not dmarc_found:
-            score += 10
-            findings.append("DMARC record was not found. Domain may be more vulnerable to email spoofing.")
+            risk_points.append({
+                "points": 10,
+                "message": "DMARC record was not found. Domain may be more vulnerable to email spoofing."
+            })
 
         header_report, header_score, header_findings = analyze_security_headers(headers)
-        score += header_score
-        findings.extend(header_findings)
+        for finding in header_findings:
+            risk_points.append({
+                "points": 15,
+                "message": finding
+            })
 
         cookie_report, cookie_score, cookie_findings = analyze_cookies(response.cookies)
-        score += cookie_score
-        findings.extend(cookie_findings)
+        for finding in cookie_findings:
+            risk_points.append({
+                "points": 5,
+                "message": finding
+            })
 
         http_methods, methods_score, methods_findings = analyze_http_methods(final_url)
-        score += methods_score
-        findings.extend(methods_findings)
+        for finding in methods_findings:
+            risk_points.append({
+                "points": methods_score,
+                "message": finding
+            })
 
         robots_txt = analyze_robots_txt(final_url)
         security_txt = analyze_security_txt(final_url)
 
-        risk_level = calculate_risk_level(score)
+        summary = calculate_website_risk(risk_points)
 
         return {
             "website": {
@@ -342,11 +360,9 @@ def analyze_website(url: str):
             "http_methods": http_methods,
             "robots_txt": robots_txt,
             "security_txt": security_txt,
-            "summary": {
-                "score": score,
-                "risk_level": risk_level,
-                "findings": findings
-            }
+            "technologies": technologies,
+            "whois": whois_info,
+            "summary": summary
         }
 
     except requests.exceptions.RequestException:
@@ -396,6 +412,16 @@ def analyze_website(url: str):
                 "security_rating": "Unknown",
                 "description": "security.txt helps security researchers report vulnerabilities responsibly.",
                 "recommendation": "Unable to check security.txt."
+            },
+            "technologies": [],
+            "whois": {
+                "registrar": None,
+                "creation_date": None,
+                "expiration_date": None,
+                "updated_date": None,
+                "name_servers": [],
+                "emails": [],
+                "country": None
             },
             "summary": {
                 "score": 100,
