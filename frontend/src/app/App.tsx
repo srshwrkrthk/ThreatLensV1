@@ -2045,7 +2045,7 @@ function URLFindingsSection() {
 }
 
 
-const API_URL = "http://127.0.0.1:8000";
+const API_URL = "https://threat-lens-v1.onrender.com";
 
 function clampScore(n: number) {
   return Math.max(0, Math.min(100, Math.round(Number(n) || 0)));
