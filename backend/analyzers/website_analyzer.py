@@ -401,10 +401,10 @@ def analyze_website(url: str):
         risk_points = []
 
         if not https_enabled:
-            risk_points.append({"points": 25, "message": "Website does not use HTTPS."})
+            risk_points.append({"points": 45, "message": "Website does not use HTTPS."})
 
         if not ssl_info["certificate_valid"]:
-            risk_points.append({"points": 25, "message": "SSL certificate is invalid or unavailable."})
+            risk_points.append({"points": 30, "message": "SSL certificate is invalid or unavailable."})
 
         days_remaining = ssl_info.get("days_remaining")
         if days_remaining is not None:
